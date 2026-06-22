@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+<nav class="navbar">
+  <div class="navbar-brand">ElectroVerse<span style="font-size:0.75rem;color:var(--text-3);font-weight:400;margin-left:8px;">Admin</span></div>
+  <div class="nav-links">
+    <span id="notif-btn" class="nav-link" onclick="showSection('notifications')" style="cursor:pointer">
+      Notifications <span id="notif-badge" class="nav-badge hidden">0</span>
+    </span>
+    <button class="nav-link" onclick="logout()">Sign Out</button>
+  </div>
+</nav>
+
+<div class="app-layout">
+  <aside class="sidebar" id="app-sidebar"><div class="sidebar-resizer" id="sidebar-resizer"></div>
+    <div class="sidebar-item active" onclick="showSection('dashboard')" id="nav-dashboard"><span class="icon"></span><span class="sidebar-item-text">Dashboard</span></div>
+    <div class="sidebar-item" onclick="showSection('products')" id="nav-products"><span class="icon"></span><span class="sidebar-item-text">Products</span></div>
+    <div class="sidebar-item" onclick="showSection('sellers')" id="nav-sellers"><span class="icon"></span><span class="sidebar-item-text">Sellers</span></div>
+    <div class="sidebar-item" onclick="showSection('orders')" id="nav-orders"><span class="icon"></span><span class="sidebar-item-text">Seller Orders</span></div>
+    <div class="sidebar-item" onclick="showSection('billbook')" id="nav-billbook"><span class="icon"></span><span class="sidebar-item-text">Billbook</span></div>
+    <div class="sidebar-item" onclick="showSection('notifications')" id="nav-notifications"><span class="icon"></span><span class="sidebar-item-text">Notifications</span></div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-item" onclick="logout()"><span class="icon"></span><span class="sidebar-item-text">Logout</span></div>
+    <div class="sidebar-toggle">
+    <button class="sidebar-toggle-btn" title="Collapse sidebar" id="sidebar-toggle-btn">&#8249;</button>
+  </div>
+</aside>
+
+  <main class="main-content">
+    <!-- DASHBOARD -->
+    <section id="sec-dashboard">
+      <div class="page-header">
+        <div><div class="page-title">Dashboard</div><div class="page-subtitle">Overview of your platform</div></div>
+      </div>
+      <div class="grid-4" id="stat-cards"></div>
+      <div class="grid-2 mt-6" style="align-items:start">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Recent Seller Orders</span></div>
+          <div class="card-body" style="padding:0">
+            <div id="recent-orders-list"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Billbook Summary</span></div>
+          <div class="card-body" style="padding:0">
+            <div id="billbook-summary-list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRODUCTS -->
+    <section id="sec-products" class="hidden">
+      <div class="page-header">
+        <div><div class="page-title">Products</div><div class="page-subtitle">Manage your inventory</div></div>
+        <button class="btn btn-primary" onclick="openProductModal()">+ Add Product</button>
+      </div>
+      <div class="search-bar">
+        <div class="search-input-wrap" style="flex:1">
+          <span class="search-icon"></span>
+          <input type="text" class="form-input" id="prod-search" placeholder="Search products..." oninput="filterProducts()">
+        </div>
+        <select class="form-select" id="prod-cat-filter" onchange="filterProducts()" style="width:160px">
+          <option value="">All Categories</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table id="products-table">
+          <thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Bulk Price</th><th>Qty</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="products-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SELLERS -->
+    <section id="sec-sellers" class="hidden">
+      <div class="page-header">
+        <div><div class="page-title">Sellers</div><div class="page-subtitle">Manage store sellers</div></div>
+        <button class="btn btn-primary" onclick="openSellerModal()">+ Add Seller</button>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Store Name</th><th>Username</th><th>Phone</th><th>Email</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
+        <tbody id="sellers-tbody"></tbody></table>
+      </div>
+    </section>
+
+    <!-- SELLER ORDERS -->
+    <section id="sec-orders" class="hidden">
+      <div class="page-header">
+        <div><div class="page-title">Seller Orders</div><div class="page-subtitle">Review and manage bulk orders</div></div>
+        <select class="form-select" id="order-status-filter" onchange="filterOrders()" style="width:160px">
+          <option value="">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="delivered">Delivered</option>
+        </select>
+      </div>
+      <div id="orders-list"></div>
+    </section>
+
+    <!-- BILLBOOK -->
+    <section id="sec-billbook" class="hidden">
+      <div class="page-header">
+        <div><div class="page-title">Billbook</div><div class="page-subtitle">Track dues and payments</div></div>
+        <button class="btn btn-primary" onclick="openBillModal()">+ Add Entry</button>
+      </div>
+      <div class="grid-3" id="bill-summary-cards" style="margin-bottom:28px"></div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">All Transactions</span>
+          <select class="form-select" id="bill-seller-filter" onchange="loadBillbook()" style="width:180px">
+            <option value="">All Sellers</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Seller</th><th>Type</th><th>Amount</th><th>Description</th><th>Order</th><th>Payment Date</th><th>Created</th></tr></thead>
+          <tbody id="billbook-tbody"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- NOTIFICATIONS -->
+    <section id="sec-notifications" class="hidden">
+      <div class="page-header">
+        <div><div class="page-title">Notifications</div><div class="page-subtitle">Messages from sellers</div></div>
+      </div>
+      <div id="notifs-list"></div>
+    </section>
+  </main>
+</div>
+
+<!-- PRODUCT MODAL -->
+<div id="product-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="product-modal-title">Add Product</span>
+      <button class="modal-close" onclick="hideModal('product-modal')">✕</button>
+    </div>
+    <div class="grid-2">
+      <div class="form-group"><label class="form-label">Name *</label><input type="text" id="p-name" class="form-input"></div>
+      <div class="form-group"><label class="form-label">Category</label><input type="text" id="p-cat" class="form-input" placeholder="e.g. Smartphones"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Description</label><textarea id="p-desc" class="form-textarea"></textarea></div>
+    <div class="grid-3">
+      <div class="form-group"><label class="form-label">Price (₹) *</label><input type="number" id="p-price" class="form-input"></div>
+      <div class="form-group"><label class="form-label">Bulk Price (₹)</label><input type="number" id="p-bulk" class="form-input"></div>
+      <div class="form-group"><label class="form-label">Quantity</label><input type="number" id="p-qty" class="form-input" value="0"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Image URL</label><input type="text" id="p-img" class="form-input" placeholder="https://..."></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="hideModal('product-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveProduct()">Save Product</button>
+    </div>
+  </div>
+</div>
+
+<!-- SELLER MODAL -->
+<div id="seller-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="seller-modal-title">Add Seller</span>
+      <button class="modal-close" onclick="hideModal('seller-modal')">✕</button>
+    </div>
+    <div class="grid-2">
+      <div class="form-group"><label class="form-label">Store Name *</label><input type="text" id="s-store" class="form-input"></div>
+      <div class="form-group"><label class="form-label">Username *</label><input type="text" id="s-user" class="form-input"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Password *</label><input type="password" id="s-pass" class="form-input" placeholder="Set login password"></div>
+    <div class="grid-2">
+      <div class="form-group"><label class="form-label">Phone</label><input type="tel" id="s-phone" class="form-input"></div>
+      <div class="form-group"><label class="form-label">Email</label><input type="email" id="s-email" class="form-input"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="hideModal('seller-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSeller()">Save Seller</button>
+    </div>
+  </div>
+</div>
+
+<!-- BILL ENTRY MODAL -->
+<div id="bill-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Add Bill Entry</span>
+      <button class="modal-close" onclick="hideModal('bill-modal')">✕</button>
+    </div>
+    <div class="form-group"><label class="form-label">Seller *</label>
+      <select id="b-seller" class="form-select"><option value="">Choose seller...</option></select></div>
+    <div class="grid-2">
+      <div class="form-group"><label class="form-label">Type *</label>
+        <select id="b-type" class="form-select"><option value="due">Due</option><option value="paid">Paid</option></select></div>
+      <div class="form-group"><label class="form-label">Amount (₹) *</label><input type="number" id="b-amount" class="form-input"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Description</label><input type="text" id="b-desc" class="form-input"></div>
+    <div class="form-group"><label class="form-label">Payment Date</label><input type="date" id="b-date" class="form-input"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="hideModal('bill-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBillEntry()">Save Entry</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+<script src="/static/js/utils.js"></script>
+<script>
+let currentSection = 'dashboard';
+let allProducts = [], allOrders = [], allSellers = [], allBillbook = [];
+let editingProduct = null, editingSeller = null;
+
+async function init() {
+  await requireAuth('admin');
+  showSection('dashboard');
+  loadNotifCount();
+}
+
+function showSection(name) {
+  document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-' + name).classList.remove('hidden');
+  document.getElementById('nav-' + name)?.classList.add('active');
+  currentSection = name;
+  if (name === 'dashboard') loadDashboard();
+  else if (name === 'products') loadProducts();
+  else if (name === 'sellers') loadSellers();
+  else if (name === 'orders') loadOrders();
+  else if (name === 'billbook') loadBillbook();
+  else if (name === 'notifications') loadNotifications();
+}
+
+// ── DASHBOARD ──────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const [orders, summary, notifs] = await Promise.all([
+    api('/api/admin/seller-orders'),
+    api('/api/admin/billbook/summary'),
+    api('/api/admin/notifications')
+  ]);
+  const pending = orders.filter(o => o.status === 'pending').length;
+  const unread = notifs.filter(n => !n.is_read).length;
+  const totalDue = summary.reduce((s, r) => s + (r.total_due - r.total_paid), 0);
+
+  document.getElementById('stat-cards').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Seller Orders</div><div class="stat-value">${orders.length}</div><div class="stat-sub">${pending} pending</div></div>
+    <div class="stat-card"><div class="stat-label">Active Sellers</div><div class="stat-value">${summary.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Balance Due</div><div class="stat-value text-danger">${fmt(totalDue)}</div></div>
+    <div class="stat-card"><div class="stat-label">Unread Alerts</div><div class="stat-value text-warning">${unread}</div></div>
+  `;
+
+  const recentOrders = orders.slice(0, 5);
+  document.getElementById('recent-orders-list').innerHTML = recentOrders.length ? recentOrders.map(o => `
+    <div class="flex justify-between items-center" style="padding:12px 18px;border-bottom:1px solid var(--border-2)">
+      <div><div style="font-size:13px;font-weight:600;color:var(--ink-1)">${o.store_name}</div><div style="font-size:11px;color:var(--ink-4);margin-top:2px">${fmtDate(o.created_at)}</div></div>
+      <div class="flex gap-2 items-center"><span style="font-size:13px;font-weight:600">${fmt(o.total_amount)}</span><span class="badge badge-${o.status}">${o.status}</span></div>
+    </div>`).join('') : '<div class="empty-state"><p>No orders yet</p></div>';
+
+  document.getElementById('billbook-summary-list').innerHTML = summary.slice(0, 6).map(s => {
+    const bal = s.total_due - s.total_paid;
+    return `<div class="flex justify-between items-center" style="padding:12px 18px;border-bottom:1px solid var(--border-2)">
+      <div style="font-size:13px;font-weight:600;color:var(--ink-1)">${s.store_name}</div>
+      <span class="badge ${bal > 0 ? 'badge-due' : 'badge-paid'}">${bal > 0 ? fmt(bal) + ' due' : 'Cleared'}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── PRODUCTS ──────────────────────────────────────────────────────────────
+async function loadProducts() {
+  allProducts = await api('/api/products');
+  const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))];
+  const catFilter = document.getElementById('prod-cat-filter');
+  catFilter.innerHTML = '<option value="">All Categories</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  renderProducts(allProducts);
+}
+
+function filterProducts() {
+  const q = document.getElementById('prod-search').value.toLowerCase();
+  const cat = document.getElementById('prod-cat-filter').value;
+  renderProducts(allProducts.filter(p =>
+    (!q || p.name.toLowerCase().includes(q) || (p.description||'').toLowerCase().includes(q)) &&
+    (!cat || p.category === cat)
+  ));
+}
+
+function renderProducts(products) {
+  document.getElementById('products-tbody').innerHTML = products.map(p => `
+    <tr>
+      <td><div style="font-weight:600">${getEmoji(p.category)} ${p.name}</div><div class="text-xs text-muted" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.description||''}</div></td>
+      <td><span class="chip">${p.category||'—'}</span></td>
+      <td>${fmt(p.price)}</td>
+      <td class="text-success">${p.bulk_price ? fmt(p.bulk_price) : '—'}</td>
+      <td>${p.quantity}</td>
+      <td><span class="badge ${p.is_active ? 'badge-active' : 'badge-due'}">${p.is_active ? 'Active' : 'Inactive'}</span></td>
+      <td><div class="flex gap-2">
+        <button class="btn btn-secondary btn-sm" onclick="editProduct(${p.id})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">Remove</button>
+      </div></td>
+    </tr>`).join('');
+}
+
+function openProductModal(product = null) {
+  editingProduct = product;
+  document.getElementById('product-modal-title').textContent = product ? 'Edit Product' : 'Add Product';
+  document.getElementById('p-name').value = product?.name || '';
+  document.getElementById('p-cat').value = product?.category || '';
+  document.getElementById('p-desc').value = product?.description || '';
+  document.getElementById('p-price').value = product?.price || '';
+  document.getElementById('p-bulk').value = product?.bulk_price || '';
+  document.getElementById('p-qty').value = product?.quantity || 0;
+  document.getElementById('p-img').value = product?.image_url || '';
+  showModal('product-modal');
+}
+
+function editProduct(id) { openProductModal(allProducts.find(p => p.id === id)); }
+
+async function saveProduct() {
+  const body = {
+    name: document.getElementById('p-name').value,
+    category: document.getElementById('p-cat').value,
+    description: document.getElementById('p-desc').value,
+    price: parseFloat(document.getElementById('p-price').value),
+    bulk_price: parseFloat(document.getElementById('p-bulk').value) || null,
+    quantity: parseInt(document.getElementById('p-qty').value) || 0,
+    image_url: document.getElementById('p-img').value,
+  };
+  try {
+    if (editingProduct) await api(`/api/admin/products/${editingProduct.id}`, 'PUT', body);
+    else await api('/api/admin/products', 'POST', body);
+    toast(editingProduct ? 'Product updated!' : 'Product added!');
+    hideModal('product-modal');
+    loadProducts();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteProduct(id) {
+  if (!confirm('Remove this product?')) return;
+  await api(`/api/admin/products/${id}`, 'DELETE');
+  toast('Product removed');
+  loadProducts();
+}
+
+// ── SELLERS ──────────────────────────────────────────────────────────────
+async function loadSellers() {
+  allSellers = await api('/api/admin/sellers');
+  document.getElementById('sellers-tbody').innerHTML = allSellers.map(s => `
+    <tr>
+      <td><div style="font-weight:600">${s.store_name}</div></td>
+      <td><code style="background:var(--surface-2);padding:2px 8px;border-radius:4px;font-size:0.8rem">${s.username}</code></td>
+      <td>${s.phone || '—'}</td>
+      <td>${s.email || '—'}</td>
+      <td><span class="badge ${s.is_active ? 'badge-active' : 'badge-due'}">${s.is_active ? 'Active' : 'Disabled'}</span></td>
+      <td class="text-muted">${fmtDate(s.created_at)}</td>
+      <td><div class="flex gap-2">
+        <button class="btn btn-secondary btn-sm" onclick="editSeller(${s.id})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="removeSeller(${s.id})">Remove</button>
+      </div></td>
+    </tr>`).join('');
+}
+
+function openSellerModal(seller = null) {
+  editingSeller = seller;
+  document.getElementById('seller-modal-title').textContent = seller ? 'Edit Seller' : 'Add Seller';
+  document.getElementById('s-store').value = seller?.store_name || '';
+  document.getElementById('s-user').value = seller?.username || '';
+  document.getElementById('s-pass').value = '';
+  document.getElementById('s-phone').value = seller?.phone || '';
+  document.getElementById('s-email').value = seller?.email || '';
+  document.getElementById('s-user').disabled = !!seller;
+  showModal('seller-modal');
+}
+
+function editSeller(id) { openSellerModal(allSellers.find(s => s.id === id)); }
+
+async function saveSeller() {
+  const body = {
+    store_name: document.getElementById('s-store').value,
+    username: document.getElementById('s-user').value,
+    password: document.getElementById('s-pass').value,
+    phone: document.getElementById('s-phone').value,
+    email: document.getElementById('s-email').value,
+    is_active: 1
+  };
+  try {
+    if (editingSeller) await api(`/api/admin/sellers/${editingSeller.id}`, 'PUT', body);
+    else await api('/api/admin/sellers', 'POST', body);
+    toast('Seller saved!');
+    hideModal('seller-modal');
+    loadSellers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function removeSeller(id) {
+  if (!confirm('Disable this seller?')) return;
+  await api(`/api/admin/sellers/${id}`, 'DELETE');
+  toast('Seller disabled');
+  loadSellers();
+}
+
+// ── ORDERS ──────────────────────────────────────────────────────────────
+async function loadOrders() {
+  allOrders = await api('/api/admin/seller-orders');
+  filterOrders();
+}
+
+function filterOrders() {
+  const filter = document.getElementById('order-status-filter').value;
+  const orders = filter ? allOrders.filter(o => o.status === filter) : allOrders;
+  document.getElementById('orders-list').innerHTML = orders.length ? orders.map(o => `
+    <div class="card card-sm" style="margin-bottom:12px">
+      <div class="flex justify-between items-center" style="margin-bottom:12px">
+        <div>
+          <span style="font-weight:700">Order #${o.id}</span>
+          <span class="text-muted" style="margin-left:8px;font-size:0.85rem">from ${o.store_name} (${o.username})</span>
+        </div>
+        <div class="flex gap-2 items-center">
+          <span class="badge badge-${o.status}">${o.status}</span>
+          <span class="font-bold text-accent">${fmt(o.total_amount)}</span>
+          ${o.status === 'pending' ? `<button class="btn btn-success btn-sm" onclick="markDelivered(${o.id})">✓ Mark Delivered</button>` : ''}
+        </div>
+      </div>
+      <div style="font-size:0.82rem;color:var(--text-3);margin-bottom:10px">${fmtDatetime(o.created_at)} ${o.delivered_at ? '· Delivered: ' + fmtDate(o.delivered_at) : ''}</div>
+      <div class="flex gap-2" style="flex-wrap:wrap">
+        ${o.items.map(i => `<span class="chip">${i.product_name} × ${i.quantity} @ ${fmt(i.unit_price)}</span>`).join('')}
+      </div>
+      ${o.notes ? `<div class="text-xs text-muted" style="margin-top:8px">Note: ${o.notes}</div>` : ''}
+    </div>`).join('') : '<div class="empty-state"><div class="empty-icon">📋</div><p>No orders found</p></div>';
+}
+
+async function markDelivered(id) {
+  await api(`/api/admin/seller-orders/${id}/deliver`, 'POST');
+  toast('Marked as delivered!');
+  loadOrders();
+}
+
+// ── BILLBOOK ──────────────────────────────────────────────────────────────
+async function loadBillbook() {
+  const [entries, summary, sellers] = await Promise.all([
+    api('/api/admin/billbook'),
+    api('/api/admin/billbook/summary'),
+    api('/api/admin/sellers')
+  ]);
+  allBillbook = entries;
+
+  // Summary cards
+  const totalDue = summary.reduce((s, r) => s + r.total_due, 0);
+  const totalPaid = summary.reduce((s, r) => s + r.total_paid, 0);
+  document.getElementById('bill-summary-cards').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Billed</div><div class="stat-value">${fmt(totalDue)}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Paid</div><div class="stat-value text-success">${fmt(totalPaid)}</div></div>
+    <div class="stat-card"><div class="stat-label">Outstanding</div><div class="stat-value text-danger">${fmt(totalDue - totalPaid)}</div></div>
+  `;
+
+  // Seller filter
+  const selFilter = document.getElementById('bill-seller-filter');
+  const selId = selFilter.value;
+  selFilter.innerHTML = '<option value="">All Sellers</option>' + sellers.map(s => `<option value="${s.id}" ${selId == s.id ? 'selected' : ''}>${s.store_name}</option>`).join('');
+
+  // Bill seller modal dropdown
+  document.getElementById('b-seller').innerHTML = '<option value="">Choose seller...</option>' + sellers.filter(s => s.is_active).map(s => `<option value="${s.id}">${s.store_name}</option>`).join('');
+
+  const filtered = selId ? entries.filter(e => e.seller_id == selId) : entries;
+  document.getElementById('billbook-tbody').innerHTML = filtered.map(e => `
+    <tr>
+      <td><div style="font-weight:600">${e.store_name}</div><div class="text-xs text-muted">${e.username}</div></td>
+      <td><span class="badge badge-${e.type}">${e.type.toUpperCase()}</span></td>
+      <td class="${e.type === 'due' ? 'text-danger' : 'text-success'} font-bold">${fmt(e.amount)}</td>
+      <td class="text-muted">${e.description || '—'}</td>
+      <td>${e.order_id ? `#${e.order_id}` : '—'}</td>
+      <td>${fmtDate(e.payment_date)}</td>
+      <td>${fmtDate(e.created_at)}</td>
+    </tr>`).join('');
+}
+
+function openBillModal() {
+  document.getElementById('b-amount').value = '';
+  document.getElementById('b-desc').value = '';
+  document.getElementById('b-date').value = '';
+  showModal('bill-modal');
+}
+
+async function saveBillEntry() {
+  try {
+    await api('/api/admin/billbook', 'POST', {
+      seller_id: parseInt(document.getElementById('b-seller').value),
+      type: document.getElementById('b-type').value,
+      amount: parseFloat(document.getElementById('b-amount').value),
+      description: document.getElementById('b-desc').value,
+      payment_date: document.getElementById('b-date').value,
+    });
+    toast('Entry added!');
+    hideModal('bill-modal');
+    loadBillbook();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── NOTIFICATIONS ──────────────────────────────────────────────────────────
+async function loadNotifCount() {
+  try {
+    const notifs = await api('/api/admin/notifications');
+    const unread = notifs.filter(n => !n.is_read).length;
+    const badge = document.getElementById('notif-badge');
+    if (unread > 0) { badge.textContent = unread; badge.classList.remove('hidden'); }
+    else badge.classList.add('hidden');
+  } catch {}
+  setTimeout(loadNotifCount, 30000);
+}
+
+async function loadNotifications() {
+  const notifs = await api('/api/admin/notifications');
+  document.getElementById('notifs-list').innerHTML = notifs.length ? notifs.map(n => `
+    <div class="notif-item ${n.is_read ? '' : 'unread'}">
+      <div class="notif-msg">${n.message}</div>
+      <div class="notif-meta">${n.store_name || 'System'} · ${fmtDatetime(n.created_at)}</div>
+      ${!n.is_read ? `<button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="markRead(${n.id})">Mark as Read</button>` : ''}
+    </div>`).join('') : '<div class="empty-state"><div class="empty-icon"></div><p>No notifications yet</p></div>';
+  loadNotifCount();
+}
+
+async function markRead(id) {
+  await api(`/api/admin/notifications/${id}/read`, 'POST');
+  loadNotifications();
+}
+
+init();
+</script>
+</body>
+</html>

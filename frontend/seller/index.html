@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seller Portal</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+<nav class="navbar">
+  <div class="navbar-brand">ElectroVerse<span style="font-size:0.75rem;color:var(--text-3);font-weight:400;margin-left:8px;">Seller</span></div>
+  <div class="nav-links">
+    <button class="nav-link" id="cart-btn" onclick="toggleCart()">Cart <span id="cart-count" class="nav-badge hidden">0</span></button>
+    <span id="seller-info" class="text-muted text-sm"></span>
+    <button class="nav-link" onclick="logout()">Sign Out</button>
+  </div>
+</nav>
+
+<div class="app-layout">
+  <aside class="sidebar" id="app-sidebar"><div class="sidebar-resizer" id="sidebar-resizer"></div>
+    <div class="sidebar-item active" onclick="showSection('catalog')" id="nav-catalog"><span class="icon"></span><span class="sidebar-item-text">Browse Products</span></div>
+    <div class="sidebar-item" onclick="showSection('orders')" id="nav-orders"><span class="icon"></span><span class="sidebar-item-text">My Orders</span></div>
+    <div class="sidebar-item" onclick="showSection('billbook')" id="nav-billbook"><span class="icon"></span><span class="sidebar-item-text">My Billbook</span></div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-item" onclick="logout()"><span class="icon"></span><span class="sidebar-item-text">Logout</span></div>
+    <div class="sidebar-toggle">
+    <button class="sidebar-toggle-btn" title="Collapse sidebar" id="sidebar-toggle-btn">&#8249;</button>
+  </div>
+</aside>
+
+  <main class="main-content">
+    <!-- CATALOG -->
+    <section id="sec-catalog">
+      <div class="page-header">
+        <div><div class="page-title">Product Catalog</div><div class="page-subtitle">Browse and add to your order cart</div></div>
+      </div>
+      <div class="search-bar">
+        <div class="search-input-wrap" style="flex:1">
+          <span class="search-icon"></span>
+          <input type="text" class="form-input" id="prod-search" placeholder="Search products..." oninput="filterCatalog()">
+        </div>
+        <div id="cat-chips" class="flex gap-2" style="flex-wrap:wrap"></div>
+      </div>
+      <div class="grid-3" id="catalog-grid"></div>
+    </section>
+
+    <!-- ORDERS -->
+    <section id="sec-orders" class="hidden">
+      <div class="page-header">
+        <div><div class="page-title">My Orders</div><div class="page-subtitle">Track your bulk orders</div></div>
+      </div>
+      <div id="seller-orders-list"></div>
+    </section>
+
+    <!-- BILLBOOK -->
+    <section id="sec-billbook" class="hidden">
+      <div class="page-header">
+        <div><div class="page-title">My Billbook</div><div class="page-subtitle">Track your dues and payments</div></div>
+      </div>
+      <div class="grid-3" id="bill-cards" style="margin-bottom:28px"></div>
+      <div class="card">
+        <div class="table-wrap">
+          <table><thead><tr><th>Type</th><th>Amount</th><th>Description</th><th>Order</th><th>Payment Date</th><th>Date</th></tr></thead>
+          <tbody id="seller-bill-tbody"></tbody></table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- CART PANEL -->
+<div id="cart-panel" class="cart-panel">
+  <div class="flex justify-between items-center" style="margin-bottom:20px">
+    <h3>Order Cart</h3>
+    <button class="modal-close" onclick="toggleCart()">✕</button>
+  </div>
+  <div id="cart-items">
+    <div class="empty-state"><div class="empty-icon"></div><p>Your cart is empty</p></div>
+  </div>
+  <div id="cart-footer" class="hidden" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+    <div class="flex justify-between" style="margin-bottom:8px">
+      <span class="text-muted">Total</span>
+      <span class="font-bold text-accent" id="cart-total">₹0</span>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes for Admin</label>
+      <textarea id="order-notes" class="form-textarea" placeholder="Any special instructions..."></textarea>
+    </div>
+    <button class="btn btn-primary w-full" onclick="submitOrder()">Send Order Request →</button>
+  </div>
+</div>
+
+<!-- PRODUCT QTY MODAL -->
+<div id="qty-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <span class="modal-title" id="qty-modal-title">Add to Cart</span>
+      <button class="modal-close" onclick="hideModal('qty-modal')">✕</button>
+    </div>
+    <div id="qty-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="hideModal('qty-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="addToCart()">Add to Cart</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+<script src="/static/js/utils.js"></script>
+<script>
+let user = null;
+let allProducts = [], filteredProducts = [];
+let cart = JSON.parse(localStorage.getItem('seller-cart') || '[]');
+let selectedCat = null, qtyProduct = null;
+
+async function init() {
+  user = await requireAuth('seller');
+  document.getElementById('seller-info').textContent = ' ' + user.store_name;
+  await loadCatalog();
+  renderCart();
+  showSection('catalog');
+}
+
+function showSection(name) {
+  document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-' + name).classList.remove('hidden');
+  document.getElementById('nav-' + name)?.classList.add('active');
+  if (name === 'orders') loadOrders();
+  else if (name === 'billbook') loadBillbook();
+}
+
+// ── CATALOG ────────────────────────────────────────────────────────────────
+async function loadCatalog() {
+  allProducts = await api('/api/products');
+  filteredProducts = allProducts;
+  const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))];
+  document.getElementById('cat-chips').innerHTML =
+    `<span class="chip active" onclick="setCat(null, this)">All</span>` +
+    cats.map(c => `<span class="chip" onclick="setCat('${c}', this)">${getEmoji(c)} ${c}</span>`).join('');
+  renderCatalog();
+}
+
+function setCat(cat, el) {
+  selectedCat = cat;
+  document.querySelectorAll('#cat-chips .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  filterCatalog();
+}
+
+function filterCatalog() {
+  const q = document.getElementById('prod-search').value.toLowerCase();
+  filteredProducts = allProducts.filter(p =>
+    (!selectedCat || p.category === selectedCat) &&
+    (!q || p.name.toLowerCase().includes(q) || (p.description||'').toLowerCase().includes(q))
+  );
+  renderCatalog();
+}
+
+function renderCatalog() {
+  document.getElementById('catalog-grid').innerHTML = filteredProducts.map(p => {
+    const inCart = cart.find(c => c.product_id === p.id);
+    return `
+      <div class="product-card" onclick="openQtyModal(${p.id})">
+        <div class="product-img">${getEmoji(p.category)}</div>
+        <div class="product-body">
+          <div class="product-cat">${p.category || 'General'}</div>
+          <div class="product-name">${p.name}</div>
+          <div class="product-price">${fmt(p.price)}</div>
+          ${p.bulk_price ? `<div class="product-bulk">Bulk: ${fmt(p.bulk_price)}</div>` : ''}
+          <div class="product-qty">Stock: ${p.quantity} units</div>
+          ${inCart ? `<div style="margin-top:8px"><span class="badge badge-active">In cart: ${inCart.quantity}</span></div>` : ''}
+        </div>
+      </div>`;
+  }).join('') || '<div class="empty-state"><div class="empty-icon"></div><p>No products found</p></div>';
+}
+
+function openQtyModal(id) {
+  qtyProduct = allProducts.find(p => p.id === id);
+  const existing = cart.find(c => c.product_id === id);
+  document.getElementById('qty-modal-title').textContent = 'Add to Cart — ' + qtyProduct.name;
+  document.getElementById('qty-modal-body').innerHTML = `
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:3rem;margin-bottom:8px">${getEmoji(qtyProduct.category)}</div>
+      <div style="font-weight:600">${qtyProduct.name}</div>
+      <div class="text-accent" style="font-size:1.1rem;margin-top:4px">${fmt(qtyProduct.price)} each</div>
+      ${qtyProduct.bulk_price ? `<div class="text-success text-sm">Bulk price: ${fmt(qtyProduct.bulk_price)}</div>` : ''}
+    </div>
+    <div class="form-group">
+      <label class="form-label">Quantity</label>
+      <div class="qty-control">
+        <button class="qty-btn" onclick="changeQty(-1)">−</button>
+        <input type="number" id="qty-input" class="form-input" value="${existing?.quantity || 1}" min="1" max="${qtyProduct.quantity}" style="text-align:center;width:80px">
+        <button class="qty-btn" onclick="changeQty(1)">+</button>
+      </div>
+    </div>
+    <div class="text-xs text-muted">Stock available: ${qtyProduct.quantity} units</div>
+  `;
+  showModal('qty-modal');
+}
+
+function changeQty(delta) {
+  const input = document.getElementById('qty-input');
+  input.value = Math.max(1, Math.min(qtyProduct.quantity, parseInt(input.value || 1) + delta));
+}
+
+function addToCart() {
+  const qty = parseInt(document.getElementById('qty-input').value);
+  const existing = cart.findIndex(c => c.product_id === qtyProduct.id);
+  if (existing >= 0) cart[existing].quantity = qty;
+  else cart.push({ product_id: qtyProduct.id, quantity: qty, name: qtyProduct.name, price: qtyProduct.bulk_price || qtyProduct.price });
+  saveCart();
+  hideModal('qty-modal');
+  toast(`${qtyProduct.name} added to cart`);
+  renderCatalog();
+}
+
+// ── CART ────────────────────────────────────────────────────────────────
+function saveCart() {
+  localStorage.setItem('seller-cart', JSON.stringify(cart));
+  renderCart();
+}
+
+function renderCart() {
+  const count = cart.reduce((s, i) => s + i.quantity, 0);
+  const badge = document.getElementById('cart-count');
+  if (count > 0) { badge.textContent = count; badge.classList.remove('hidden'); }
+  else badge.classList.add('hidden');
+
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  if (cart.length === 0) {
+    document.getElementById('cart-items').innerHTML = '<div class="empty-state"><div class="empty-icon"></div><p>Your cart is empty</p></div>';
+    document.getElementById('cart-footer').classList.add('hidden');
+  } else {
+    document.getElementById('cart-items').innerHTML = cart.map((item, idx) => `
+      <div class="cart-item">
+        <div>
+          <div class="text-sm font-bold">${item.name}</div>
+          <div class="text-xs text-muted">${fmt(item.price)} × ${item.quantity}</div>
+        </div>
+        <div class="flex gap-2 items-center">
+          <span class="text-sm text-accent">${fmt(item.price * item.quantity)}</span>
+          <button class="qty-btn" onclick="removeFromCart(${idx})" style="font-size:0.75rem">✕</button>
+        </div>
+      </div>`).join('');
+    document.getElementById('cart-total').textContent = fmt(total);
+    document.getElementById('cart-footer').classList.remove('hidden');
+  }
+}
+
+function removeFromCart(idx) { cart.splice(idx, 1); saveCart(); renderCatalog(); }
+function toggleCart() { document.getElementById('cart-panel').classList.toggle('open'); }
+
+async function submitOrder() {
+  if (cart.length === 0) return toast('Cart is empty', 'error');
+  try {
+    const res = await api('/api/seller/cart/submit', 'POST', {
+      items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+      notes: document.getElementById('order-notes').value,
+    });
+    toast(`Order #${res.order_id} sent to admin!`);
+    cart = [];
+    saveCart();
+    renderCart();
+    toggleCart();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── ORDERS ────────────────────────────────────────────────────────────────
+async function loadOrders() {
+  const orders = await api('/api/seller/orders');
+  document.getElementById('seller-orders-list').innerHTML = orders.length ? orders.map(o => `
+    <div class="card card-sm" style="margin-bottom:12px">
+      <div class="flex justify-between items-center" style="margin-bottom:10px">
+        <span style="font-weight:700">Order #${o.id}</span>
+        <div class="flex gap-2 items-center">
+          <span class="badge badge-${o.status}">${o.status}</span>
+          <span class="font-bold text-accent">${fmt(o.total_amount)}</span>
+        </div>
+      </div>
+      <div class="text-xs text-muted" style="margin-bottom:10px">${fmtDatetime(o.created_at)} ${o.delivered_at ? '· Delivered: ' + fmtDate(o.delivered_at) : ''}</div>
+      <div class="flex gap-2" style="flex-wrap:wrap">
+        ${o.items.map(i => `<span class="chip">${i.product_name} × ${i.quantity}</span>`).join('')}
+      </div>
+    </div>`).join('') : '<div class="empty-state"><div class="empty-icon"></div><p>No orders yet. Start ordering from the catalog!</p></div>';
+}
+
+// ── BILLBOOK ────────────────────────────────────────────────────────────────
+async function loadBillbook() {
+  const data = await api('/api/seller/billbook');
+  document.getElementById('bill-cards').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Billed</div><div class="stat-value">${fmt(data.total_due)}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Paid</div><div class="stat-value text-success">${fmt(data.total_paid)}</div></div>
+    <div class="stat-card"><div class="stat-label">Balance Due</div><div class="stat-value ${data.balance > 0 ? 'text-danger' : 'text-success'}">${fmt(data.balance)}</div></div>
+  `;
+  document.getElementById('seller-bill-tbody').innerHTML = data.entries.map(e => `
+    <tr>
+      <td><span class="badge badge-${e.type}">${e.type.toUpperCase()}</span></td>
+      <td class="${e.type === 'due' ? 'text-danger' : 'text-success'} font-bold">${fmt(e.amount)}</td>
+      <td class="text-muted">${e.description || '—'}</td>
+      <td>${e.order_id ? `#${e.order_id}` : '—'}</td>
+      <td>${fmtDate(e.payment_date)}</td>
+      <td>${fmtDate(e.created_at)}</td>
+    </tr>`).join('');
+}
+
+init();
+</script>
+</body>
+</html>

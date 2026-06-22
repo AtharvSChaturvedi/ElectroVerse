@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ElectroVerse — Electronics Store</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+  <style>
+    .hero-banner {
+      background: linear-gradient(135deg, #0a0e1a 0%, #111827 50%, rgba(59,130,246,0.08) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 48px 32px;
+      text-align: center;
+    }
+    .hero-banner h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 10px; color: #ffffff; }
+    .hero-banner h1 span { color: var(--red-border); }
+    .hero-banner p { color: rgba(255,255,255,0.74); font-size: 1rem; max-width: 500px; margin: 0 auto 24px; }
+    .store-layout { display: flex; gap: 0; }
+    .store-sidebar { width: 220px; padding: 24px 16px; border-right: 1px solid var(--border); flex-shrink: 0; }
+    .store-sidebar h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); margin-bottom: 12px; }
+    .cat-link { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 0.88rem; color: var(--text-2); transition: all 0.2s; }
+    .cat-link:hover, .cat-link.active { color: var(--text); background: var(--surface-2); }
+    .store-main { flex: 1; padding: 24px 28px; min-width: 0; }
+    .product-detail-img { height: 200px; background: var(--surface-2); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 5rem; margin-bottom: 20px; }
+    @media (max-width: 768px) { .store-sidebar { display: none; } .hero-banner h1 { font-size: 1.8rem; } }
+  </style>
+</head>
+<body>
+<nav class="navbar">
+  <div class="navbar-brand">ElectroVerse</div>
+  <div class="nav-links">
+    <div class="search-input-wrap" style="width:240px;position:relative">
+      <span class="search-icon"></span>
+      <input type="text" class="form-input" id="nav-search" placeholder="Search electronics..." oninput="handleNavSearch()" style="padding-left:36px;height:38px;font-size:0.85rem">
+    </div>
+    <button class="nav-link" id="cart-nav-btn" onclick="toggleCart()">Cart <span id="cart-count" class="nav-badge hidden">0</span></button>
+    <button class="nav-link" id="orders-btn" onclick="showOrders()" style="display:none">My Orders</button>
+    <div class="signin-dropdown" id="signin-dropdown">
+      <button class="nav-link" id="signin-btn" onclick="toggleSigninMenu(event)">Sign in</button>
+      <div class="signin-menu hidden" id="signin-menu">
+        <div class="signin-menu-item" onclick="goToLogin('admin')">Admin</div>
+        <div class="signin-menu-item" onclick="goToLogin('seller')">Store Seller</div>
+        <div class="signin-menu-item" onclick="goToLogin('user')">Customer</div>
+      </div>
+    </div>
+    <button class="nav-link hidden" id="logout-btn" onclick="logout()">Sign Out</button>
+  </div>
+</nav>
+
+<div class="hero-banner" id="hero">
+  <h1>Shop Electronics</h1>
+  <p>Premium electronic components at unbeatable prices.</p>
+  <div class="flex gap-4" style="justify-content:center;flex-wrap:wrap">
+    <span class="chip">Microcontrollers</span>
+    <span class="chip">Sensors</span>
+    <span class="chip">Acutators</span>
+    <span class="chip">Other Electronic Components</span>
+  </div>
+</div>
+
+<div class="store-layout">
+  <aside class="store-sidebar">
+    <h3>Categories</h3>
+    <div id="cat-nav">
+      <div class="cat-link active" onclick="setCat(null, this)">All Products</div>
+    </div>
+  </aside>
+  <main class="store-main">
+    <div class="flex justify-between items-center" style="margin-bottom:20px">
+      <h2 id="store-heading" style="font-size:1.2rem;font-weight:700">All Products</h2>
+      <select class="form-select" id="sort-select" onchange="sortProducts()" style="width:160px;height:38px">
+        <option value="default">Sort by</option>
+        <option value="price-asc">Price: Low to High</option>
+        <option value="price-desc">Price: High to Low</option>
+        <option value="name">Name A-Z</option>
+      </select>
+    </div>
+    <div class="grid-4" id="store-grid"></div>
+  </main>
+</div>
+
+<!-- CART PANEL -->
+<div id="cart-panel" class="cart-panel">
+  <div class="flex justify-between items-center" style="margin-bottom:20px">
+    <h3>Cart</h3>
+    <button class="modal-close" onclick="toggleCart()">✕</button>
+  </div>
+  <div id="cart-items"></div>
+  <div id="cart-footer" class="hidden" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+    <div class="flex justify-between" style="margin-bottom:16px">
+      <span class="text-muted">Total</span>
+      <span class="font-bold text-accent text-lg" id="cart-total">₹0</span>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Delivery Address</label>
+      <textarea id="delivery-addr" class="form-textarea" placeholder="Enter your delivery address..."></textarea>
+    </div>
+    <button class="btn btn-primary w-full" onclick="placeOrder()">Place Order →</button>
+  </div>
+</div>
+
+<!-- PRODUCT DETAIL MODAL -->
+<div id="prod-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <span class="modal-title" id="prod-modal-title"></span>
+      <button class="modal-close" onclick="hideModal('prod-modal')">✕</button>
+    </div>
+    <div id="prod-modal-body"></div>
+  </div>
+</div>
+
+<!-- ORDERS MODAL -->
+<div id="orders-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:660px">
+    <div class="modal-header">
+      <span class="modal-title">My Orders</span>
+      <button class="modal-close" onclick="hideModal('orders-modal')">✕</button>
+    </div>
+    <div id="orders-list"></div>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+<script src="/static/js/utils.js"></script>
+<script>
+let currentUser = null;
+let allProducts = [], displayProducts = [];
+let cart = JSON.parse(sessionStorage.getItem('user-cart') || '[]');
+let selectedCat = null;
+
+async function init() {
+  try {
+    currentUser = await api('/api/auth/me');
+    if (currentUser.role !== 'user') currentUser = null;
+  } catch {}
+
+  if (currentUser) {
+    document.getElementById('signin-dropdown').style.display = 'none';
+    document.getElementById('logout-btn').classList.remove('hidden');
+    document.getElementById('orders-btn').style.display = '';
+  }
+
+  await loadProducts();
+  renderCart();
+}
+
+async function loadProducts() {
+  allProducts = await api('/api/products');
+  displayProducts = allProducts;
+  const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))];
+  document.getElementById('cat-nav').innerHTML =
+    `<div class="cat-link active" onclick="setCat(null, this)">All Products</div>` +
+    cats.map(c => `<div class="cat-link" onclick="setCat('${c}', this)">${getEmoji(c)} ${c}</div>`).join('');
+  renderGrid();
+}
+
+function handleNavSearch() {
+  filterAndRender();
+}
+
+function setCat(cat, el) {
+  selectedCat = cat;
+  document.querySelectorAll('.cat-link').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('store-heading').textContent = cat ? `${getEmoji(cat)} ${cat}` : 'All Products';
+  filterAndRender();
+}
+
+function filterAndRender() {
+  const q = document.getElementById('nav-search').value.toLowerCase();
+  displayProducts = allProducts.filter(p =>
+    (!selectedCat || p.category === selectedCat) &&
+    (!q || p.name.toLowerCase().includes(q) || (p.description||'').toLowerCase().includes(q))
+  );
+  renderGrid();
+}
+
+function sortProducts() {
+  const s = document.getElementById('sort-select').value;
+  if (s === 'price-asc') displayProducts.sort((a,b) => a.price - b.price);
+  else if (s === 'price-desc') displayProducts.sort((a,b) => b.price - a.price);
+  else if (s === 'name') displayProducts.sort((a,b) => a.name.localeCompare(b.name));
+  renderGrid();
+}
+
+function renderGrid() {
+  document.getElementById('store-grid').innerHTML = displayProducts.map(p => `
+    <div class="product-card" onclick="openProductDetail(${p.id})">
+      <div class="product-img">${getEmoji(p.category)}</div>
+      <div class="product-body">
+        <div class="product-cat">${p.category || 'Electronics'}</div>
+        <div class="product-name">${p.name}</div>
+        <div class="product-price">${fmt(p.price)}</div>
+        <div class="product-qty" style="margin-top:6px">${p.quantity > 0 ? `In Stock (${p.quantity})` : 'Out of Stock'}</div>
+      </div>
+    </div>`).join('') || '<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon"></div><p>No products found</p></div>';
+}
+
+function openProductDetail(id) {
+  const p = allProducts.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('prod-modal-title').textContent = p.name;
+  document.getElementById('prod-modal-body').innerHTML = `
+    <div class="product-detail-img">${getEmoji(p.category)}</div>
+    <div class="chip" style="margin-bottom:12px">${p.category}</div>
+    <p style="color:var(--text-2);font-size:0.9rem;margin-bottom:16px">${p.description || 'Premium electronics product.'}</p>
+    <div class="flex justify-between items-center" style="margin-bottom:20px">
+      <div><div style="font-size:1.6rem;font-weight:700">${fmt(p.price)}</div></div>
+      <div class="text-muted text-sm">${p.quantity > 0 ? `${p.quantity} in stock` : ' Out of stock'}</div>
+    </div>
+    <div class="qty-control" style="margin-bottom:16px">
+      <button class="qty-btn" onclick="document.getElementById('detail-qty').stepDown()">−</button>
+      <input type="number" id="detail-qty" class="form-input" value="1" min="1" max="${p.quantity}" style="text-align:center;width:80px">
+      <button class="qty-btn" onclick="document.getElementById('detail-qty').stepUp()">+</button>
+    </div>
+    <button class="btn btn-primary w-full" onclick="addProductToCart(${p.id})" ${p.quantity === 0 ? 'disabled' : ''}>
+      ${p.quantity === 0 ? 'Out of Stock' : 'Add to Cart'}
+    </button>
+  `;
+  showModal('prod-modal');
+}
+
+function addProductToCart(id) {
+  if (!currentUser) { toast('Please sign in to add items to cart', 'error'); hideModal('prod-modal'); setTimeout(() => window.location.href = '/login?role=user', 1200); return; }
+  const p = allProducts.find(x => x.id === id);
+  const qty = parseInt(document.getElementById('detail-qty').value) || 1;
+  const existing = cart.findIndex(c => c.product_id === id);
+  if (existing >= 0) cart[existing].quantity += qty;
+  else cart.push({ product_id: id, quantity: qty, name: p.name, price: p.price });
+  saveCart();
+  hideModal('prod-modal');
+  toast(`${p.name} added to cart`);
+}
+
+function saveCart() {
+  sessionStorage.setItem('user-cart', JSON.stringify(cart));
+  renderCart();
+}
+
+function renderCart() {
+  const count = cart.reduce((s, i) => s + i.quantity, 0);
+  const badge = document.getElementById('cart-count');
+  if (count > 0) { badge.textContent = count; badge.classList.remove('hidden'); } else badge.classList.add('hidden');
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  if (cart.length === 0) {
+    document.getElementById('cart-items').innerHTML = '<div class="empty-state"><div class="empty-icon"></div><p>Your cart is empty</p></div>';
+    document.getElementById('cart-footer').classList.add('hidden');
+  } else {
+    document.getElementById('cart-items').innerHTML = cart.map((item, idx) => `
+      <div class="cart-item">
+        <div>
+          <div class="text-sm font-bold">${item.name}</div>
+          <div class="text-xs text-muted">${fmt(item.price)} × ${item.quantity}</div>
+        </div>
+        <div class="flex gap-2 items-center">
+          <span class="text-sm text-accent">${fmt(item.price * item.quantity)}</span>
+          <button class="qty-btn" onclick="removeCartItem(${idx})" style="font-size:0.75rem">✕</button>
+        </div>
+      </div>`).join('');
+    document.getElementById('cart-total').textContent = fmt(total);
+    document.getElementById('cart-footer').classList.remove('hidden');
+  }
+}
+
+function removeCartItem(idx) { cart.splice(idx, 1); saveCart(); }
+function toggleCart() { document.getElementById('cart-panel').classList.toggle('open'); }
+
+// ── SIGN-IN DROPDOWN ───────────────────────────────────────────────────────
+function toggleSigninMenu(e) {
+  e.stopPropagation();
+  document.getElementById('signin-menu').classList.toggle('hidden');
+}
+
+function goToLogin(role) {
+  window.location.href = '/login?role=' + role;
+}
+
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('signin-menu');
+  const dd = document.getElementById('signin-dropdown');
+  if (menu && dd && !dd.contains(e.target)) {
+    menu.classList.add('hidden');
+  }
+});
+
+async function placeOrder() {
+  if (!currentUser) { toast('Please sign in first', 'error'); return; }
+  const addr = document.getElementById('delivery-addr').value;
+  if (!addr) { toast('Please enter delivery address', 'error'); return; }
+  try {
+    const res = await api('/api/user/orders', 'POST', {
+      items: cart.map(i => ({ product_id: i.product_id, quantity: i.quantity })),
+      address: addr
+    });
+    toast(`Order #${res.order_id} placed successfully!`);
+    cart = [];
+    saveCart();
+    toggleCart();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function showOrders() {
+  const orders = await api('/api/user/orders');
+  document.getElementById('orders-list').innerHTML = orders.length ? orders.map(o => `
+    <div class="card card-sm" style="margin-bottom:12px">
+      <div class="flex justify-between items-center" style="margin-bottom:10px">
+        <span style="font-weight:700">Order #${o.id}</span>
+        <div class="flex gap-2 items-center">
+          <span class="badge badge-${o.status}">${o.status}</span>
+          <span class="text-accent font-bold">${fmt(o.total_amount)}</span>
+        </div>
+      </div>
+      <div class="text-xs text-muted" style="margin-bottom:10px">${fmtDatetime(o.created_at)}</div>
+      <div class="flex gap-2" style="flex-wrap:wrap">
+        ${o.items.map(i => `<span class="chip">${i.product_name} × ${i.quantity}</span>`).join('')}
+      </div>
+      ${o.shipping_address ? `<div class="text-xs text-muted" style="margin-top:8px"> ${o.shipping_address}</div>` : ''}
+    </div>`).join('') : '<div class="empty-state"><div class="empty-icon"></div><p>No orders yet</p></div>';
+  showModal('orders-modal');
+}
+
+init();
+</script>
+</body>
+</html>

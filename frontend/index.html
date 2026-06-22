@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ElectroVerse — Login</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+  <style>
+    .hero { text-align: center; padding: 60px 20px 40px; }
+    .hero h1 { font-size: 3rem; font-weight: 700; margin-bottom: 12px; }
+    .hero h1 span { color: var(--red); }
+    .hero p { font-size: 1.1rem; color: var(--ink-3); max-width: 500px; margin: 0 auto 40px; }
+    .role-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 800px; margin: 0 auto; padding: 0 20px 60px; }
+    .role-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 28px 24px; cursor: pointer;
+      transition: all 0.25s; text-align: center;
+    }
+    .role-card:hover { border-color: var(--red); transform: translateY(-4px); box-shadow: 0 16px 48px rgba(196,18,48,0.12); }
+    .role-card.selected { border-color: var(--red); background: var(--red-dim); }
+    .role-icon { font-size: 2.5rem; margin-bottom: 12px; }
+    .role-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; }
+    .role-desc { font-size: 0.82rem; color: var(--text-2); line-height: 1.5; }
+    .login-section { max-width: 420px; margin: 0 auto; padding: 0 20px 60px; }
+    .glow-bar { height: 2px; background: linear-gradient(90deg, transparent, var(--red), transparent); margin: 0 auto 48px; width: 60%; }
+    @media (max-width: 640px) { .role-cards { grid-template-columns: 1fr; } .hero h1 { font-size: 2rem; } }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand" onclick="window.location.href='/'" style="cursor:pointer">ElectroVerse</div>
+    <div class="nav-links"></div>
+  </nav>
+
+  <div class="hero">
+    <h1>Electro<span>Verse</span></h1>
+    <p>Login Page</p>
+  </div>
+
+  <div class="role-cards">
+    <div class="role-card" onclick="selectRole('admin')" id="card-admin">
+      <div class="role-icon"></div>
+      <div class="role-title">Admin</div>
+      <div class="role-desc">Manage products, sellers, orders and billbook</div>
+    </div>
+    <div class="role-card" onclick="selectRole('seller')" id="card-seller">
+      <div class="role-icon"></div>
+      <div class="role-title">Store Seller</div>
+      <div class="role-desc">Order in bulk, track deliveries and payments</div>
+    </div>
+    <div class="role-card" onclick="selectRole('user')" id="card-user">
+      <div class="role-icon"></div>
+      <div class="role-title">Customer</div>
+      <div class="role-desc">Browse and shop electronics at great prices</div>
+    </div>
+  </div>
+
+  <div class="glow-bar"></div>
+
+  <!-- LOGIN SECTION -->
+  <div class="login-section" id="login-section" style="display:none">
+    <!-- ADMIN LOGIN -->
+    <div id="form-admin" class="login-box hidden">
+      <div class="login-logo">
+        <h1> <span>Admin</span></h1>
+        <p>Sign in to your admin dashboard</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Admin Username</label>
+        <input type="text" id="admin-user" class="form-input" placeholder="admin">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="admin-pass" class="form-input" placeholder="********">
+      </div>
+      <button class="btn btn-primary w-full" onclick="doLogin('admin')">Sign In as Admin</button>
+    </div>
+
+    <!-- SELLER LOGIN -->
+    <div id="form-seller" class="login-box hidden">
+      <div class="login-logo">
+        <h1> <span>Seller</span></h1>
+        <p>Sign in with credentials from admin</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Seller Username</label>
+        <input type="text" id="seller-user" class="form-input" placeholder="assigned by admin">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="seller-pass" class="form-input" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary w-full" onclick="doLogin('seller')">Sign In as Seller</button>
+    </div>
+
+    <!-- USER LOGIN / REGISTER -->
+    <div id="form-user" class="login-box hidden">
+      <div class="login-logo">
+        <h1> <span>Customer</span></h1>
+        <p>Sign in or create an account</p>
+      </div>
+      <div class="login-tabs">
+        <button class="login-tab active" id="tab-signin" onclick="switchTab('signin')">Sign In</button>
+        <button class="login-tab" id="tab-register" onclick="switchTab('register')">Register</button>
+      </div>
+      <!-- Sign In -->
+      <div id="signin-form">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="user-email" class="form-input" placeholder="you@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" id="user-pass" class="form-input" placeholder="••••••••">
+        </div>
+        <button class="btn btn-primary w-full" onclick="doLogin('user')">Sign In</button>
+      </div>
+      <!-- Register -->
+      <div id="register-form" class="hidden">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" id="reg-name" class="form-input" placeholder="Your name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="reg-email" class="form-input" placeholder="you@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          <input type="tel" id="reg-phone" class="form-input" placeholder="9876543210">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" id="reg-pass" class="form-input" placeholder="••••••••">
+        </div>
+        <button class="btn btn-primary w-full" onclick="doRegister()">Create Account</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+  <script src="/static/js/utils.js"></script>
+  <script>
+    let selectedRole = null;
+
+    // Check if already logged in
+    api('/api/auth/me').then(user => {
+      if (user && user.role) redirectUser(user);
+    }).catch(() => {});
+
+    function selectRole(role) {
+      selectedRole = role;
+      ['admin','seller','user'].forEach(r => {
+        document.getElementById('card-' + r).classList.remove('selected');
+        document.getElementById('form-' + r).classList.add('hidden');
+      });
+      document.getElementById('card-' + role).classList.add('selected');
+      document.getElementById('form-' + role).classList.remove('hidden');
+      document.getElementById('login-section').style.display = 'block';
+      document.getElementById('login-section').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function switchTab(tab) {
+      document.getElementById('signin-form').classList.toggle('hidden', tab !== 'signin');
+      document.getElementById('register-form').classList.toggle('hidden', tab !== 'register');
+      document.getElementById('tab-signin').classList.toggle('active', tab === 'signin');
+      document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+    }
+
+    async function doLogin(role) {
+      try {
+        let body = { role };
+        if (role === 'admin') {
+          body.username = document.getElementById('admin-user').value;
+          body.password = document.getElementById('admin-pass').value;
+        } else if (role === 'seller') {
+          body.username = document.getElementById('seller-user').value;
+          body.password = document.getElementById('seller-pass').value;
+        } else {
+          body.email = document.getElementById('user-email').value;
+          body.password = document.getElementById('user-pass').value;
+        }
+        const res = await api('/api/auth/login', 'POST', body);
+        redirectUser(res);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function doRegister() {
+      try {
+        await api('/api/auth/register', 'POST', {
+          name: document.getElementById('reg-name').value,
+          email: document.getElementById('reg-email').value,
+          phone: document.getElementById('reg-phone').value,
+          password: document.getElementById('reg-pass').value,
+        });
+        toast('Account created! Redirecting...');
+        setTimeout(() => window.location.href = '/storefront', 1000);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function redirectUser(user) {
+      if (user.role === 'admin') window.location.href = '/admin';
+      else if (user.role === 'seller') window.location.href = '/seller';
+      else window.location.href = '/storefront';
+    }
+
+    // Auto-select a role if the page was reached via the storefront's
+    // sign-in dropdown, e.g. /login?role=admin
+    const _params = new URLSearchParams(window.location.search);
+    const _roleParam = _params.get('role');
+    if (_roleParam && ['admin', 'seller', 'user'].includes(_roleParam)) {
+      selectRole(_roleParam);
+    }
+  </script>
+</body>
+</html>

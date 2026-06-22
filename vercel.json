@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    { "src": "/static/(.*)", "dest": "/static/$1" },
+    { "src": "/admin(.*)", "dest": "/frontend/admin/index.html" },
+    { "src": "/seller(.*)", "dest": "/frontend/seller/index.html" },
+    { "src": "/storefront(.*)", "dest": "/frontend/user/storefront.html" },
+    { "src": "^/$", "dest": "/frontend/index.html" },
+    { "src": "/api/(.*)", "dest": "/index.py" }
+  ]
+}
