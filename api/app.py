@@ -13,21 +13,69 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 app = Flask(__name__,
             static_folder=os.path.join(BASE_DIR, 'static'),
             static_url_path='/static')
+
+# IMPORTANT: set a real SECRET_KEY as a Vercel env var. Flask sessions are
+# signed client-side cookies (no server-side session store), so this key
+# must stay constant across deploys/cold-starts or logged-in users get
+# booted out every time you redeploy.
 app.secret_key = os.environ.get('SECRET_KEY', 'electropaas-dev-secret-2024')
-CORS(app, supports_credentials=True, origins=["*"])
+
+# In production set ALLOWED_ORIGIN to your real Vercel URL, e.g.
+# https://your-project.vercel.app  — "*" cannot be combined with
+# supports_credentials=True in real browsers, so we default to same-origin.
+_allowed_origin = os.environ.get('ALLOWED_ORIGIN', '*')
+CORS(app, supports_credentials=True, origins=[_allowed_origin] if _allowed_origin != '*' else '*')
 
 DB_PATH = os.path.join(BASE_DIR, 'electropaas.db')
 
+# ── DATABASE BACKEND ──────────────────────────────────────────────────────
+# Locally (no env vars set): falls back to the same electropaas.db file as
+# before, so local dev is unchanged.
+#
+# In production (Vercel): set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN as
+# env vars. Vercel's filesystem is read-only/ephemeral, so a local sqlite
+# file cannot be used there — this app talks to a hosted Turso database
+# instead, using a library that mimics the built-in sqlite3 API.
+TURSO_URL = os.environ.get('TURSO_DATABASE_URL')
+TURSO_TOKEN = os.environ.get('TURSO_AUTH_TOKEN')
+USE_TURSO = bool(TURSO_URL)
+
+if USE_TURSO:
+    import libsql_experimental as libsql
+
+
+def get_db():
+    if USE_TURSO:
+        return libsql.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+    conn = sqlite3.connect(DB_PATH)
+    return conn
+
+
+def _row_dict(cursor, row):
+    """Convert a single fetched row (tuple) into a dict using cursor.description.
+    Works the same whether the row came from sqlite3 or libsql."""
+    if row is None:
+        return None
+    cols = [d[0] for d in cursor.description]
+    return dict(zip(cols, row))
+
+
+def _rows_dict(cursor, rows):
+    cols = [d[0] for d in cursor.description]
+    return [dict(zip(cols, r)) for r in rows]
+
+
 # ── FRONTEND ROUTES ───────────────────────────────────────────────────────────
+# Note: on Vercel these are normally intercepted by vercel.json's static
+# routes before ever reaching Flask (faster, no cold start). They're kept
+# here so `python api/app.py` still works for local dev.
 
 @app.route('/')
 def index():
-    # The storefront is now the main landing page.
     return send_from_directory(os.path.join(BASE_DIR, 'frontend', 'user'), 'storefront.html')
 
 @app.route('/login')
 def login_page():
-    # Role-selection / sign-in page (admin, seller, customer).
     return send_from_directory(os.path.join(BASE_DIR, 'frontend'), 'index.html')
 
 @app.route('/admin')
@@ -46,14 +94,19 @@ def storefront_page():
     return send_from_directory(os.path.join(BASE_DIR, 'frontend', 'user'), 'storefront.html')
 
 
-# ── DB SETUP ────────────────────────────────────────────────────────────────
+# ── DB SETUP (local dev only) ────────────────────────────────────────────
+# This only runs against the local sqlite file. When USE_TURSO is true we
+# skip it entirely — your Turso database is created and seeded once via
+# the `turso db shell` import step in DEPLOYMENT.md, not on every cold
+# start. Running CREATE TABLE / seed-product inserts on every serverless
+# invocation would be slow and risk re-adding sample rows you deleted.
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def hash_password(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
 
 def init_db():
+    if USE_TURSO:
+        return
     conn = get_db()
     c = conn.cursor()
 
@@ -163,11 +216,9 @@ def init_db():
     );
     """)
 
-    # Seed admin if not exists
     admin_pass = hash_password('admin123')
     c.execute("INSERT OR IGNORE INTO admins (username, password_hash) VALUES (?, ?)", ('admin', admin_pass))
 
-    # Seed sample products
     sample_products = [
         ('Samsung 65" 4K OLED TV', 'Stunning 4K OLED display with smart features', 'Television', 89999, 75000, 15, ''),
         ('Sony WH-1000XM5 Headphones', 'Industry-leading noise cancelling wireless headphones', 'Audio', 29999, 24000, 30, ''),
@@ -184,9 +235,6 @@ def init_db():
 
     conn.commit()
     conn.close()
-
-def hash_password(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
 
 # ── AUTH HELPERS ─────────────────────────────────────────────────────────────
 
@@ -234,21 +282,24 @@ def login():
     c = conn.cursor()
 
     if role == 'admin':
-        row = c.execute("SELECT * FROM admins WHERE username=? AND password_hash=?", (data['username'], password_hash)).fetchone()
+        cur = c.execute("SELECT * FROM admins WHERE username=? AND password_hash=?", (data['username'], password_hash))
+        row = _row_dict(cur, cur.fetchone())
         if row:
             session['user'] = {'id': row['id'], 'role': 'admin', 'username': row['username']}
             conn.close()
             return jsonify({'success': True, 'role': 'admin', 'username': row['username']})
 
     elif role == 'seller':
-        row = c.execute("SELECT * FROM sellers WHERE username=? AND password_hash=? AND is_active=1", (data['username'], password_hash)).fetchone()
+        cur = c.execute("SELECT * FROM sellers WHERE username=? AND password_hash=? AND is_active=1", (data['username'], password_hash))
+        row = _row_dict(cur, cur.fetchone())
         if row:
             session['user'] = {'id': row['id'], 'role': 'seller', 'username': row['username'], 'store_name': row['store_name']}
             conn.close()
             return jsonify({'success': True, 'role': 'seller', 'username': row['username'], 'store_name': row['store_name']})
 
     elif role == 'user':
-        row = c.execute("SELECT * FROM users WHERE email=? AND password_hash=?", (data['email'], password_hash)).fetchone()
+        cur = c.execute("SELECT * FROM users WHERE email=? AND password_hash=?", (data['email'], password_hash))
+        row = _row_dict(cur, cur.fetchone())
         if row:
             session['user'] = {'id': row['id'], 'role': 'user', 'email': row['email'], 'name': row['name']}
             conn.close()
@@ -271,6 +322,10 @@ def register():
         return jsonify({'success': True})
     except sqlite3.IntegrityError:
         return jsonify({'error': 'Email already registered'}), 400
+    except Exception as e:
+        if 'UNIQUE' in str(e):
+            return jsonify({'error': 'Email already registered'}), 400
+        raise
     finally:
         conn.close()
 
@@ -302,16 +357,18 @@ def get_products():
     if search:
         query += " AND (name LIKE ? OR description LIKE ?)"
         params.extend([f'%{search}%', f'%{search}%'])
-    rows = c.execute(query, params).fetchall()
+    cur = c.execute(query, params)
+    result = _rows_dict(cur, cur.fetchall())
     conn.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify(result)
 
 @app.route('/api/products/<int:pid>', methods=['GET'])
 def get_product(pid):
     conn = get_db()
-    row = conn.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+    cur = conn.execute("SELECT * FROM products WHERE id=?", (pid,))
+    row = _row_dict(cur, cur.fetchone())
     conn.close()
-    return jsonify(dict(row)) if row else ('', 404)
+    return jsonify(row) if row else ('', 404)
 
 @app.route('/api/admin/products', methods=['POST'])
 @require_admin
@@ -352,9 +409,10 @@ def delete_product(pid):
 @require_admin
 def get_sellers():
     conn = get_db()
-    rows = conn.execute("SELECT id, username, store_name, phone, email, created_at, is_active FROM sellers").fetchall()
+    cur = conn.execute("SELECT id, username, store_name, phone, email, created_at, is_active FROM sellers")
+    result = _rows_dict(cur, cur.fetchall())
     conn.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify(result)
 
 @app.route('/api/admin/sellers', methods=['POST'])
 @require_admin
@@ -369,6 +427,10 @@ def add_seller():
         return jsonify({'success': True, 'id': c.lastrowid})
     except sqlite3.IntegrityError:
         return jsonify({'error': 'Username already exists'}), 400
+    except Exception as e:
+        if 'UNIQUE' in str(e):
+            return jsonify({'error': 'Username already exists'}), 400
+        raise
     finally:
         conn.close()
 
@@ -402,21 +464,21 @@ def remove_seller(sid):
 @require_admin
 def admin_seller_orders():
     conn = get_db()
-    rows = conn.execute("""
+    cur = conn.execute("""
         SELECT so.*, s.store_name, s.username
         FROM seller_orders so
         JOIN sellers s ON s.id = so.seller_id
         ORDER BY so.created_at DESC
-    """).fetchall()
+    """)
+    orders = _rows_dict(cur, cur.fetchall())
     result = []
-    for r in rows:
-        order = dict(r)
-        items = conn.execute("""
+    for order in orders:
+        icur = conn.execute("""
             SELECT soi.*, p.name as product_name FROM seller_order_items soi
             JOIN products p ON p.id = soi.product_id
             WHERE soi.order_id=?
-        """, (r['id'],)).fetchall()
-        order['items'] = [dict(i) for i in items]
+        """, (order['id'],))
+        order['items'] = _rows_dict(icur, icur.fetchall())
         result.append(order)
     conn.close()
     return jsonify(result)
@@ -434,13 +496,14 @@ def mark_delivered(oid):
 @require_admin
 def get_notifications():
     conn = get_db()
-    rows = conn.execute("""
+    cur = conn.execute("""
         SELECT n.*, s.store_name FROM notifications n
         LEFT JOIN sellers s ON s.id = n.from_seller_id
         ORDER BY n.created_at DESC
-    """).fetchall()
+    """)
+    result = _rows_dict(cur, cur.fetchall())
     conn.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify(result)
 
 @app.route('/api/admin/notifications/<int:nid>/read', methods=['POST'])
 @require_admin
@@ -457,13 +520,14 @@ def mark_notification_read(nid):
 @require_admin
 def admin_billbook():
     conn = get_db()
-    rows = conn.execute("""
+    cur = conn.execute("""
         SELECT b.*, s.store_name, s.username FROM billbook b
         JOIN sellers s ON s.id = b.seller_id
         ORDER BY b.created_at DESC
-    """).fetchall()
+    """)
+    result = _rows_dict(cur, cur.fetchall())
     conn.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify(result)
 
 @app.route('/api/admin/billbook', methods=['POST'])
 @require_admin
@@ -481,7 +545,7 @@ def add_billbook_entry():
 @require_admin
 def billbook_summary():
     conn = get_db()
-    rows = conn.execute("""
+    cur = conn.execute("""
         SELECT s.id, s.store_name, s.username,
             SUM(CASE WHEN b.type='due' THEN b.amount ELSE 0 END) as total_due,
             SUM(CASE WHEN b.type='paid' THEN b.amount ELSE 0 END) as total_paid
@@ -489,9 +553,13 @@ def billbook_summary():
         LEFT JOIN billbook b ON b.seller_id = s.id
         WHERE s.is_active=1
         GROUP BY s.id
-    """).fetchall()
+    """)
+    rows = _rows_dict(cur, cur.fetchall())
     conn.close()
-    return jsonify([dict(r) for r in rows])
+    for r in rows:
+        r['total_due'] = r['total_due'] or 0
+        r['total_paid'] = r['total_paid'] or 0
+    return jsonify(rows)
 
 # ── SELLER ROUTES ─────────────────────────────────────────────────────────────
 
@@ -509,7 +577,8 @@ def seller_submit_order():
 
     total = 0
     for item in items:
-        p = conn.execute("SELECT * FROM products WHERE id=?", (item['product_id'],)).fetchone()
+        cur = conn.execute("SELECT * FROM products WHERE id=?", (item['product_id'],))
+        p = _row_dict(cur, cur.fetchone())
         if p:
             price = p['bulk_price'] or p['price']
             total += price * item['quantity']
@@ -519,18 +588,18 @@ def seller_submit_order():
     order_id = c.lastrowid
 
     for item in items:
-        p = conn.execute("SELECT * FROM products WHERE id=?", (item['product_id'],)).fetchone()
+        cur = conn.execute("SELECT * FROM products WHERE id=?", (item['product_id'],))
+        p = _row_dict(cur, cur.fetchone())
         if p:
             price = p['bulk_price'] or p['price']
             c.execute("INSERT INTO seller_order_items (order_id, product_id, quantity, unit_price) VALUES (?,?,?,?)",
                       (order_id, item['product_id'], item['quantity'], price))
 
-    # Add billbook due entry
     c.execute("INSERT INTO billbook (seller_id, order_id, amount, type, description) VALUES (?,?,?,?,?)",
               (seller_id, order_id, total, 'due', f'Order #{order_id}'))
 
-    # Notify admin
-    seller = conn.execute("SELECT store_name FROM sellers WHERE id=?", (seller_id,)).fetchone()
+    scur = conn.execute("SELECT store_name FROM sellers WHERE id=?", (seller_id,))
+    seller = _row_dict(scur, scur.fetchone())
     c.execute("INSERT INTO notifications (from_seller_id, order_id, message) VALUES (?,?,?)",
               (seller_id, order_id, f"New order from {seller['store_name']} — ₹{total:,.0f}"))
 
@@ -543,15 +612,15 @@ def seller_submit_order():
 def seller_orders():
     seller_id = get_current_user()['id']
     conn = get_db()
-    rows = conn.execute("SELECT * FROM seller_orders WHERE seller_id=? ORDER BY created_at DESC", (seller_id,)).fetchall()
+    cur = conn.execute("SELECT * FROM seller_orders WHERE seller_id=? ORDER BY created_at DESC", (seller_id,))
+    orders = _rows_dict(cur, cur.fetchall())
     result = []
-    for r in rows:
-        order = dict(r)
-        items = conn.execute("""
+    for order in orders:
+        icur = conn.execute("""
             SELECT soi.*, p.name as product_name FROM seller_order_items soi
             JOIN products p ON p.id = soi.product_id WHERE soi.order_id=?
-        """, (r['id'],)).fetchall()
-        order['items'] = [dict(i) for i in items]
+        """, (order['id'],))
+        order['items'] = _rows_dict(icur, icur.fetchall())
         result.append(order)
     conn.close()
     return jsonify(result)
@@ -561,11 +630,14 @@ def seller_orders():
 def seller_billbook():
     seller_id = get_current_user()['id']
     conn = get_db()
-    rows = conn.execute("SELECT * FROM billbook WHERE seller_id=? ORDER BY created_at DESC", (seller_id,)).fetchall()
-    total_due = conn.execute("SELECT COALESCE(SUM(amount),0) as t FROM billbook WHERE seller_id=? AND type='due'", (seller_id,)).fetchone()['t']
-    total_paid = conn.execute("SELECT COALESCE(SUM(amount),0) as t FROM billbook WHERE seller_id=? AND type='paid'", (seller_id,)).fetchone()['t']
+    cur = conn.execute("SELECT * FROM billbook WHERE seller_id=? ORDER BY created_at DESC", (seller_id,))
+    entries = _rows_dict(cur, cur.fetchall())
+    d_cur = conn.execute("SELECT COALESCE(SUM(amount),0) as t FROM billbook WHERE seller_id=? AND type='due'", (seller_id,))
+    total_due = _row_dict(d_cur, d_cur.fetchone())['t']
+    p_cur = conn.execute("SELECT COALESCE(SUM(amount),0) as t FROM billbook WHERE seller_id=? AND type='paid'", (seller_id,))
+    total_paid = _row_dict(p_cur, p_cur.fetchone())['t']
     conn.close()
-    return jsonify({'entries': [dict(r) for r in rows], 'total_due': total_due, 'total_paid': total_paid, 'balance': total_due - total_paid})
+    return jsonify({'entries': entries, 'total_due': total_due, 'total_paid': total_paid, 'balance': total_due - total_paid})
 
 # ── USER ROUTES ───────────────────────────────────────────────────────────────
 
@@ -574,15 +646,15 @@ def seller_billbook():
 def user_orders():
     user_id = get_current_user()['id']
     conn = get_db()
-    rows = conn.execute("SELECT * FROM user_orders WHERE user_id=? ORDER BY created_at DESC", (user_id,)).fetchall()
+    cur = conn.execute("SELECT * FROM user_orders WHERE user_id=? ORDER BY created_at DESC", (user_id,))
+    orders = _rows_dict(cur, cur.fetchall())
     result = []
-    for r in rows:
-        order = dict(r)
-        items = conn.execute("""
+    for order in orders:
+        icur = conn.execute("""
             SELECT uoi.*, p.name as product_name FROM user_order_items uoi
             JOIN products p ON p.id = uoi.product_id WHERE uoi.order_id=?
-        """, (r['id'],)).fetchall()
-        order['items'] = [dict(i) for i in items]
+        """, (order['id'],))
+        order['items'] = _rows_dict(icur, icur.fetchall())
         result.append(order)
     conn.close()
     return jsonify(result)
@@ -597,14 +669,16 @@ def place_user_order():
     c = conn.cursor()
     total = 0
     for item in items:
-        p = conn.execute("SELECT * FROM products WHERE id=?", (item['product_id'],)).fetchone()
+        cur = conn.execute("SELECT * FROM products WHERE id=?", (item['product_id'],))
+        p = _row_dict(cur, cur.fetchone())
         if p:
             total += p['price'] * item['quantity']
     c.execute("INSERT INTO user_orders (user_id, total_amount, shipping_address) VALUES (?,?,?)",
               (user_id, total, data.get('address', '')))
     order_id = c.lastrowid
     for item in items:
-        p = conn.execute("SELECT * FROM products WHERE id=?", (item['product_id'],)).fetchone()
+        cur = conn.execute("SELECT * FROM products WHERE id=?", (item['product_id'],))
+        p = _row_dict(cur, cur.fetchone())
         if p:
             c.execute("INSERT INTO user_order_items (order_id, product_id, quantity, unit_price) VALUES (?,?,?,?)",
                       (order_id, item['product_id'], item['quantity'], p['price']))
@@ -617,7 +691,8 @@ def place_user_order():
 @app.route('/api/categories', methods=['GET'])
 def get_categories():
     conn = get_db()
-    rows = conn.execute("SELECT DISTINCT category FROM products WHERE is_active=1 AND category IS NOT NULL").fetchall()
+    cur = conn.execute("SELECT DISTINCT category FROM products WHERE is_active=1 AND category IS NOT NULL")
+    rows = _rows_dict(cur, cur.fetchall())
     conn.close()
     return jsonify([r['category'] for r in rows])
 
