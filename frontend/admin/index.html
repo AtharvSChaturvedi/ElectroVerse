@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Dashboard</title>
   <link rel="stylesheet" href="/static/css/main.css">
+  <style>
+    .prod-thumb { width: 34px; height: 34px; border-radius: 6px; object-fit: contain; background: var(--red-muted); border: 1px solid var(--border); vertical-align: middle; margin-right: 8px; }
+  </style>
 </head>
 <body>
 <nav class="navbar">
@@ -151,7 +154,12 @@
       <div class="form-group"><label class="form-label">Bulk Price (₹)</label><input type="number" id="p-bulk" class="form-input"></div>
       <div class="form-group"><label class="form-label">Quantity</label><input type="number" id="p-qty" class="form-input" value="0"></div>
     </div>
-    <div class="form-group"><label class="form-label">Image URL</label><input type="text" id="p-img" class="form-input" placeholder="https://..."></div>
+    <div class="form-group">
+      <label class="form-label">Image URL</label>
+      <input type="text" id="p-img" class="form-input" placeholder="https://..." oninput="previewProductImg()">
+      <div class="form-sublabel">Paste a direct link to an image (ending in .jpg/.png/.webp etc). Preview:</div>
+      <div id="p-img-preview" style="margin-top:6px;width:64px;height:64px;border-radius:8px;border:1px solid var(--border);background:var(--red-muted);display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:1.5rem"></div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="hideModal('product-modal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveProduct()">Save Product</button>
@@ -284,10 +292,17 @@ function filterProducts() {
   ));
 }
 
+function thumbHtml(p) {
+  if (p.image_url) {
+    return `<img class="prod-thumb" src="${p.image_url}" alt="" onerror="this.outerHTML='<span class=\\'prod-thumb\\' style=\\'display:inline-flex;align-items:center;justify-content:center\\'>${getEmoji(p.category)}</span>'">`;
+  }
+  return `<span class="prod-thumb" style="display:inline-flex;align-items:center;justify-content:center">${getEmoji(p.category)}</span>`;
+}
+
 function renderProducts(products) {
   document.getElementById('products-tbody').innerHTML = products.map(p => `
     <tr>
-      <td><div style="font-weight:600">${getEmoji(p.category)} ${p.name}</div><div class="text-xs text-muted" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.description||''}</div></td>
+      <td><div style="display:flex;align-items:center"><div>${thumbHtml(p)}</div><div><div style="font-weight:600">${p.name}</div><div class="text-xs text-muted" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.description||''}</div></div></div></td>
       <td><span class="chip">${p.category||'—'}</span></td>
       <td>${fmt(p.price)}</td>
       <td class="text-success">${p.bulk_price ? fmt(p.bulk_price) : '—'}</td>
@@ -300,6 +315,13 @@ function renderProducts(products) {
     </tr>`).join('');
 }
 
+function previewProductImg() {
+  const url = document.getElementById('p-img').value.trim();
+  const preview = document.getElementById('p-img-preview');
+  if (!url) { preview.innerHTML = ''; return; }
+  preview.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:contain" onerror="this.parentElement.innerHTML='⚠️ broken link'">`;
+}
+
 function openProductModal(product = null) {
   editingProduct = product;
   document.getElementById('product-modal-title').textContent = product ? 'Edit Product' : 'Add Product';
@@ -310,6 +332,7 @@ function openProductModal(product = null) {
   document.getElementById('p-bulk').value = product?.bulk_price || '';
   document.getElementById('p-qty').value = product?.quantity || 0;
   document.getElementById('p-img').value = product?.image_url || '';
+  previewProductImg();
   showModal('product-modal');
 }
 
@@ -323,7 +346,7 @@ async function saveProduct() {
     price: parseFloat(document.getElementById('p-price').value),
     bulk_price: parseFloat(document.getElementById('p-bulk').value) || null,
     quantity: parseInt(document.getElementById('p-qty').value) || 0,
-    image_url: document.getElementById('p-img').value,
+    image_url: document.getElementById('p-img').value.trim(),
   };
   try {
     if (editingProduct) await api(`/api/admin/products/${editingProduct.id}`, 'PUT', body);
@@ -443,7 +466,6 @@ async function loadBillbook() {
   ]);
   allBillbook = entries;
 
-  // Summary cards
   const totalDue = summary.reduce((s, r) => s + r.total_due, 0);
   const totalPaid = summary.reduce((s, r) => s + r.total_paid, 0);
   document.getElementById('bill-summary-cards').innerHTML = `
@@ -452,12 +474,10 @@ async function loadBillbook() {
     <div class="stat-card"><div class="stat-label">Outstanding</div><div class="stat-value text-danger">${fmt(totalDue - totalPaid)}</div></div>
   `;
 
-  // Seller filter
   const selFilter = document.getElementById('bill-seller-filter');
   const selId = selFilter.value;
   selFilter.innerHTML = '<option value="">All Sellers</option>' + sellers.map(s => `<option value="${s.id}" ${selId == s.id ? 'selected' : ''}>${s.store_name}</option>`).join('');
 
-  // Bill seller modal dropdown
   document.getElementById('b-seller').innerHTML = '<option value="">Choose seller...</option>' + sellers.filter(s => s.is_active).map(s => `<option value="${s.id}">${s.store_name}</option>`).join('');
 
   const filtered = selId ? entries.filter(e => e.seller_id == selId) : entries;
