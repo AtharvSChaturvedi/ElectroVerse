@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Seller Portal</title>
   <link rel="stylesheet" href="/static/css/main.css">
+  <style>
+    .product-img img { width: 100%; height: 100%; object-fit: contain; }
+  </style>
 </head>
 <body>
 <nav class="navbar">
@@ -157,12 +160,19 @@ function filterCatalog() {
   renderCatalog();
 }
 
+function productImgHtml(p) {
+  if (p.image_url) {
+    return `<img src="${p.image_url}" alt="${p.name}" onerror="this.parentElement.innerHTML='${getEmoji(p.category)}'">`;
+  }
+  return getEmoji(p.category);
+}
+
 function renderCatalog() {
   document.getElementById('catalog-grid').innerHTML = filteredProducts.map(p => {
     const inCart = cart.find(c => c.product_id === p.id);
     return `
       <div class="product-card" onclick="openQtyModal(${p.id})">
-        <div class="product-img">${getEmoji(p.category)}</div>
+        <div class="product-img">${productImgHtml(p)}</div>
         <div class="product-body">
           <div class="product-cat">${p.category || 'General'}</div>
           <div class="product-name">${p.name}</div>
