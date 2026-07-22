@@ -357,7 +357,7 @@ def get_products():
     if search:
         query += " AND (name LIKE ? OR description LIKE ?)"
         params.extend([f'%{search}%', f'%{search}%'])
-    cur = c.execute(query, params)
+    cur = c.execute(query, tuple(params))
     result = _rows_dict(cur, cur.fetchall())
     conn.close()
     return jsonify(result)
